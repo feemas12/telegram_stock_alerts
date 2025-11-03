@@ -4,12 +4,29 @@ A Telegram bot for tracking US stock prices with automatic alerts and portfolio 
 
 ## ✨ Features
 
-- 📊 **Real-time Stock Prices** - Get current stock quotes from Finnhub API
-- 📰 **Latest News** - Fetch stock-related news from Marketaux API
-- 💼 **Portfolio Management** - Track your stock positions with profit/loss calculations
-- ⚡ **Auto Alerts** - Automatic notifications when stock prices change by ±5% (configurable)
-- 🗄️ **MySQL Database** - Persistent storage for user portfolios with connection pooling
-- ⏰ **Scheduled Checks** - Automated price monitoring every 5 minutes
+### 📊 Core Features
+- **Real-time Stock Prices** - Get current stock quotes from Finnhub API
+- **Latest News** - Fetch stock-related news from Marketaux API
+- **Portfolio Management** - Track your stock positions with profit/loss calculations
+- **Weighted Average Price** - Automatic calculation when adding more shares
+- **Auto Alerts** - Automatic notifications when stock prices change by ±5% (configurable)
+
+### 🎯 Portfolio Management
+- **Add Stocks** - Add stocks with automatic weighted average calculation
+- **Remove Stocks** - 4 ways to remove (UI, specific qty, symbol all, portfolio all)
+- **View Portfolio** - Real-time profit/loss tracking
+- **Clear Portfolio** - Remove all stocks with double confirmation
+
+### 🎨 UI/UX Features
+- **Inline Buttons** - Interactive buttons for stock selection and confirmations
+- **Reply Keyboard** - Quick access menu (no typing needed)
+- **Help Examples** - Interactive help with examples
+- **Session Management** - Remembers your interaction flow
+
+### 🗄️ Data & Reliability
+- **MySQL Database** - Persistent storage with connection pooling
+- **Scheduled Checks** - Automated price monitoring every 5 minutes
+- **Data Validation** - Prevents invalid operations
 
 ## 🛠️ Tech Stack
 
@@ -78,44 +95,108 @@ A Telegram bot for tracking US stock prices with automatic alerts and portfolio 
 
 ## 📱 Telegram Commands
 
+### Portfolio Management
+
 | Command | Description | Example |
-|---------|-------------|---------|
-| `/start` | Show welcome message and help | `/start` |
-| `/add <symbol> <buy_price> <qty>` | Add stock to portfolio | `/add AAPL 180.5 10` |
-| `/check <symbol>` | Check current stock price | `/check AAPL` |
+|---------|-------------|---------|  
+| `/add <symbol> <price> <qty>` | Add stock to portfolio | `/add AAPL 180.5 10` |
 | `/portfolio` | View entire portfolio with P&L | `/portfolio` |
+| `/remove` | Show stock selection UI | `/remove` |
+| `/remove <symbol> <qty>` | Remove specific quantity ⭐ | `/remove AAPL 5` |
+| `/remove <symbol> all` | Remove all shares of a symbol ⭐ | `/remove AAPL all` |
+| `/remove all` | Remove entire portfolio ⭐ | `/remove all` |
+| `/clear` | Clear entire portfolio (double confirm) | `/clear` |
+
+### Stock Information
+
+| Command | Description | Example |
+|---------|-------------|---------|  
+| `/check <symbol>` | Check current stock price | `/check AAPL` |
 | `/news <symbol>` | Get latest stock news | `/news TSLA` |
-| `/help` | Show all commands | `/help` |
+
+### Utilities
+
+| Command | Description | Example |
+|---------|-------------|---------|  
+| `/start` | Show welcome message | `/start` |
+| `/menu` | Show quick access menu ⭐ | `/menu` |
+| `/help` | Show detailed help with examples ⭐ | `/help` |
+
+⭐ = New features
 
 ## 🎯 Usage Examples
 
-### Add Stock to Portfolio
+### 1. Add Stock to Portfolio
 ```
 /add AAPL 180.5 10
 ```
-Adds 10 shares of Apple stock at $180.50 per share.
+Adds 10 shares of Apple at $180.50/share.
 
-### Check Stock Price
+**Adding more shares automatically calculates weighted average:**
 ```
-/check TSLA
+/add AAPL 150 10
 ```
-Shows current price, daily high/low, and your position if owned.
+Now you have 20 shares with average price of $165.25
 
-### View Portfolio
+### 2. View Portfolio
 ```
 /portfolio
 ```
 Displays all your stocks with:
 - Current prices
-- Profit/Loss per stock
+- Profit/Loss per stock  
 - Total portfolio value
 - Overall P&L percentage
 
-### Get Stock News
+### 3. Remove Stocks (4 Ways)
+
+**Option 1: Use Interactive UI**
+```
+/remove
+```
+→ Shows list of stocks with buttons to select
+
+**Option 2: Remove Specific Quantity**
+```
+/remove AAPL 5
+```
+→ Removes 5 shares of AAPL (keeps average price)
+
+**Option 3: Remove All Shares of One Symbol**
+```
+/remove AAPL all
+```
+→ Removes all AAPL shares from portfolio
+
+**Option 4: Remove Entire Portfolio**
+```
+/remove all
+```
+→ Removes all stocks (requires double confirmation)
+
+### 4. Check Stock Price
+```
+/check TSLA
+```
+Shows current price, daily high/low, and your position if owned.
+
+### 5. Get Stock News
 ```
 /news AAPL
 ```
 Shows latest 5 news articles about the stock.
+
+### 6. Quick Access Menu
+```
+/menu
+```
+Shows a persistent keyboard menu with buttons for:
+- 📊 View Portfolio
+- ➕ Add Stock
+- ➖ Remove Stock  
+- 🔍 Check Price
+- 📰 News
+- ❓ Help
 
 ## ⚡ Auto Alert System
 
@@ -147,8 +228,8 @@ telegram-app-checkstock/
 ├── .env.example          # Environment template
 ├── .gitignore           # Git ignore rules
 ├── README.md            # This file
-├── index.js             # Main bot entry point
-├── db.js                # Database operations
+├── index.js             # Main bot entry point with UI handlers
+├── db.js                # Database operations (add, remove, portfolio)
 ├── services/
 │   ├── finnhub.js      # Finnhub API integration
 │   ├── marketaux.js    # Marketaux API integration
@@ -157,7 +238,9 @@ telegram-app-checkstock/
     ├── add.js          # /add command handler
     ├── check.js        # /check command handler
     ├── news.js         # /news command handler
-    └── portfolio.js    # /portfolio command handler
+    ├── portfolio.js    # /portfolio command handler
+    ├── remove.js       # /remove command with 4 modes (NEW)
+    └── clear.js        # /clear command (NEW)
 ```
 
 ## 🗄️ Database Schema
@@ -227,6 +310,48 @@ cron.schedule('*/10 * * * *', () => {
 - Check database credentials in `.env`
 - Ensure database `telegram_stock_bot` exists
 - Check MySQL user permissions
+
+## 🎨 UI/UX Features
+
+### Inline Buttons
+Interactive buttons for easy navigation:
+- **Stock Selection** - Click to choose stocks from your portfolio
+- **Confirmation** - Confirm before removing stocks
+- **Help Examples** - View examples with one click
+- **Close Button** - Dismiss messages when done
+
+### Reply Keyboard (Quick Menu)
+Persistent menu buttons:
+```
+/menu
+```
+Shows buttons at the bottom of your chat for quick access to all features.
+
+### Session Management
+The bot remembers your interaction flow:
+- No need to start over if you make a mistake
+- Can cancel operations at any time
+- Automatic cleanup of old sessions
+
+## 💡 Tips & Best Practices
+
+### Portfolio Management
+- **Add stocks gradually** - The bot automatically calculates weighted average
+- **Use `/remove` UI** - Easier than typing for beginners
+- **Use typed commands** - Faster for experienced users
+  - `/remove AAPL 5` - Quick removal
+  - `/remove AAPL all` - Remove symbol
+  - `/remove all` - Clear portfolio
+
+### Safety Features
+- **Double confirmation** - Required for `/remove all` and `/clear`
+- **Validation** - Can't remove more shares than you own
+- **Preview before action** - Always shows what will happen
+
+### Keyboard Shortcuts
+- Use `/menu` once and keep the keyboard visible
+- Click buttons instead of typing commands
+- Press "❌ ปิด" to dismiss help messages
 
 ## 📝 Development
 

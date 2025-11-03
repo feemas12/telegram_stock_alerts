@@ -198,6 +198,96 @@ export async function updateLastNotified(portfolioId, price) {
   }
 }
 
+// Remove from portfolio (partial or full)
+export async function removeFromPortfolio(userId, symbol, qty) {
+  const connection = await getConnection();
+  
+  try {
+    // Get current position
+    const [rows] = await connection.query(
+      'SELECT * FROM portfolio WHERE user_id = ? AND symbol = ?',
+      [userId, symbol.toUpperCase()]
+    );
+
+    if (rows.length === 0) {
+      throw new Error('Stock not found in portfolio');
+    }
+
+    const currentStock = rows[0];
+    const currentQty = parseFloat(currentStock.qty);
+
+    // Validate quantity
+    if (qty > currentQty) {
+      throw new Error(`Not enough shares. You have ${currentQty} but trying to remove ${qty}`);
+    }
+
+    const newQty = currentQty - qty;
+
+    if (newQty <= 0) {
+      // Remove completely if quantity becomes 0 or less
+      await connection.query(
+        'DELETE FROM portfolio WHERE user_id = ? AND symbol = ?',
+        [userId, symbol.toUpperCase()]
+      );
+    } else {
+      // Update quantity only (keep the same average price)
+      await connection.query(
+        'UPDATE portfolio SET qty = ? WHERE user_id = ? AND symbol = ?',
+        [newQty, userId, symbol.toUpperCase()]
+      );
+    }
+
+    return {
+      success: true,
+      removedQty: qty,
+      remainingQty: newQty > 0 ? newQty : 0,
+      avgPrice: parseFloat(currentStock.buy_price),
+      fullyRemoved: newQty <= 0
+    };
+  } catch (error) {
+    console.error('Error in removeFromPortfolio:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+// Clear entire portfolio for a user
+export async function clearPortfolio(userId) {
+  const connection = await getConnection();
+  
+  try {
+    // Get count before deleting
+    const [countRows] = await connection.query(
+      'SELECT COUNT(*) as count FROM portfolio WHERE user_id = ?',
+      [userId]
+    );
+    
+    const count = countRows[0].count;
+
+    if (count === 0) {
+      return { success: false, message: 'Portfolio is already empty' };
+    }
+
+    // Delete all stocks for this user
+    await connection.query(
+      'DELETE FROM portfolio WHERE user_id = ?',
+      [userId]
+    );
+
+    return { 
+      success: true, 
+      deletedCount: count,
+      message: `Cleared ${count} stock(s) from portfolio` 
+    };
+  } catch (error) {
+    console.error('Error in clearPortfolio:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 // Close connection pool (for graceful shutdown)
 export async function closeDatabase() {
   if (pool) {

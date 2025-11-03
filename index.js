@@ -8,6 +8,25 @@ import { handleAddCommand } from './commands/add.js';
 import { handleCheckCommand } from './commands/check.js';
 import { handlePortfolioCommand } from './commands/portfolio.js';
 import { handleNewsCommand } from './commands/news.js';
+import { 
+  handleRemoveCommand, 
+  handleRemoveSelect, 
+  handleRemovePartial, 
+  handleRemoveAll, 
+  handleTextInput,
+  handleRemoveConfirm,
+  handleRemoveCancel,
+  handleRemoveDirectConfirm,
+  handleRemoveAllConfirm1,
+  handleRemoveAllConfirm2
+} from './commands/remove.js';
+import { 
+  handleClearCommand, 
+  handleClearConfirm1, 
+  handleClearConfirm2, 
+  handleClearCancel 
+} from './commands/clear.js';
+import { Markup } from 'telegraf';
 
 dotenv.config();
 
@@ -31,36 +50,108 @@ if (!process.env.MARKETAUX_API_KEY) {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ALERT_THRESHOLD = parseFloat(process.env.PRICE_ALERT_THRESHOLD) || 5;
 
+// Welcome message when user adds bot (first time interaction)
+bot.on('my_chat_member', async (ctx) => {
+  const update = ctx.update.my_chat_member;
+  const newStatus = update.new_chat_member.status;
+  const oldStatus = update.old_chat_member?.status;
+
+  // Check if user just added the bot
+  if ((oldStatus === 'left' || oldStatus === 'kicked') && 
+      (newStatus === 'member' || newStatus === 'administrator')) {
+    
+    const firstName = ctx.from.first_name || 'เพื่อน';
+    
+    const welcomeMessage = `👋 *สวัสดีครับคุณ ${firstName}\\!*
+
+ยินดีต้อนรับสู่ *Stock Alert Bot* 🤖
+
+ฉันจะช่วยคุณ:
+✅ ติดตามราคาหุ้นสหรัฐฯ แบบ Real\\-time
+✅ คำนวณกำไร/ขาดทุนอัตโนมัติ
+✅ แจ้งเตือนเมื่อราคาเปลี่ยนแปลง ±${ALERT_THRESHOLD}%
+✅ จัดการพอร์ตหุ้นของคุณ
+
+━━━━━━━━━━━━━━━━━━━━
+
+🎯 *เริ่มต้นใช้งาน 3 ขั้นตอน:*
+
+1️⃣ กด /menu เพื่อดูเมนูด่วน
+2️⃣ ลองเพิ่มหุ้นแรก: \`/add AAPL 150 10\`
+3️⃣ ดูพอร์ตของคุณ: /portfolio
+
+💡 *เคล็ดลับ:*
+• ใช้ /help เพื่อดูคำสั่งทั้งหมด
+• กด /menu จะแสดงปุ่มด่วน \\(ไม่ต้องพิมพ์\\)
+
+🚀 พร้อมเริ่มต้นแล้วหรือยัง? กด /menu เลย\\!`;
+
+    await ctx.reply(welcomeMessage, { parse_mode: 'MarkdownV2' });
+    
+    // Auto show menu keyboard
+    setTimeout(async () => {
+      const keyboard = Markup.keyboard([
+        ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
+        ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
+        ['📰 ข่าวสาร', '❓ ช่วยเหลือ']
+      ])
+      .resize()
+      .persistent();
+
+      await ctx.reply(
+        '🎯 *เมนูด่วนของคุณพร้อมแล้ว\\!*\n\n' +
+        'กดปุ่มด้านล่างเพื่อเริ่มใช้งาน 👇',
+        { parse_mode: 'MarkdownV2', ...keyboard }
+      );
+    }, 1500);
+  }
+});
+
 // Start command
 bot.command('start', async (ctx) => {
-  const welcomeMessage = `🤖 *ยินดีต้อนรับสู่ Stock Alert Bot\\!*
+  const firstName = ctx.from.first_name || 'เพื่อน';
+  
+  const welcomeMessage = `👋 *สวัสดีครับคุณ ${firstName}\\!*
+
+🤖 *ยินดีต้อนรับสู่ Stock Alert Bot*
 
 บอทนี้จะช่วยติดตามหุ้นสหรัฐฯ และแจ้งเตือนเมื่อราคาเปลี่ยนแปลง
 
-📋 *คำสั่งที่ใช้งานได้:*
+━━━━━━━━━━━━━━━━━━━━
 
-/add \\<symbol\\> \\<buy\\_price\\> \\<qty\\>
+📋 *คำสั่งหลัก:*
+
+/add \\<symbol\\> \\<price\\> \\<qty\\>
   → เพิ่มหุ้นเข้าพอร์ต
   ตัวอย่าง: /add AAPL 180\\.5 10
 
-/check \\<symbol\\>
-  → ตรวจสอบราคาหุ้นปัจจุบัน
-  ตัวอย่าง: /check TSLA
+/portfolio → ดูพอร์ตทั้งหมด
+/remove → ลด/ลบหุ้น \\(ใช้ปุ่ม\\)
+/check \\<symbol\\> → เช็คราคา
+/news \\<symbol\\> → ข่าวหุ้น
+/menu → เมนูด่วน
 
-/portfolio
-  → แสดงพอร์ตทั้งหมดพร้อมกำไร/ขาดทุน
-
-/news \\<symbol\\>
-  → แสดงข่าวล่าสุดของหุ้น
-  ตัวอย่าง: /news AAPL
+━━━━━━━━━━━━━━━━━━━━
 
 ⚡ *ระบบแจ้งเตือนอัตโนมัติ*
-บอทจะตรวจสอบราคาหุ้นในพอร์ตของคุณทุก 5 นาที
-และแจ้งเตือนเมื่อราคาเปลี่ยนแปลง ±${ALERT_THRESHOLD}%
+ตรวจสอบราคาทุก 5 นาที
+แจ้งเตือนเมื่อเปลี่ยนแปลง ±${ALERT_THRESHOLD}%
 
-🚀 เริ่มต้นด้วยการเพิ่มหุ้นด้วยคำสั่ง /add`;
+🎯 *เริ่มต้นเลย\\!*
+กด /menu หรือลอง /add AAPL 150 10`;
 
-  await ctx.reply(welcomeMessage, { parse_mode: 'MarkdownV2' });
+  const keyboard = Markup.keyboard([
+    ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
+    ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
+    ['📰 ข่าวสาร', '❓ ช่วยเหลือ']
+  ])
+  .resize()
+  .persistent();
+
+  await ctx.reply(welcomeMessage, { 
+    parse_mode: 'MarkdownV2',
+    ...keyboard 
+  });
 });
 
 // Register commands
@@ -68,25 +159,282 @@ bot.command('add', handleAddCommand);
 bot.command('check', handleCheckCommand);
 bot.command('portfolio', handlePortfolioCommand);
 bot.command('news', handleNewsCommand);
+bot.command('remove', handleRemoveCommand);
+bot.command('clear', handleClearCommand);
 
-// Help command
-bot.command('help', async (ctx) => {
+// Menu command - show reply keyboard
+bot.command('menu', async (ctx) => {
+  const keyboard = Markup.keyboard([
+    ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
+    ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
+    ['📰 ข่าวสาร', '❓ ช่วยเหลือ']
+  ])
+  .resize()
+  .persistent();
+
   await ctx.reply(
-    '📋 *คำสั่งทั้งหมด:*\n\n' +
-    '/start - เริ่มต้นใช้งาน\n' +
-    '/add - เพิ่มหุ้นเข้าพอร์ต\n' +
-    '/check - ตรวจสอบราคาหุ้น\n' +
-    '/portfolio - ดูพอร์ตทั้งหมด\n' +
-    '/news - ดูข่าวหุ้น\n' +
-    '/help - แสดงความช่วยเหลือ\n\n' +
-    'ใช้ /start เพื่อดูรายละเอียดเพิ่มเติม',
+    '🎯 *เมนูหลัก*\n\n' +
+    'เลือกเมนูจากปุ่มด้านล่าง:\n' +
+    'หรือใช้คำสั่ง /help เพื่อดูทั้งหมด',
+    { parse_mode: 'Markdown', ...keyboard }
+  );
+});
+
+// Help command - with detailed usage
+bot.command('help', async (ctx) => {
+  const helpMessage = 
+    '📋 *คำสั่งทั้งหมดพร้อมวิธีใช้*\n\n' +
+    
+    '━━━━ 📊 *การจัดการพอร์ต* ━━━━\n\n' +
+    
+    '➕ */add* - เพิ่มหุ้นเข้าพอร์ต\n' +
+    '   `  /add AAPL 150.50 10`\n' +
+    '   → เพิ่ม Apple 10 หุ้น ราคา $150.50\n\n' +
+    
+    '📊 */portfolio* - ดูพอร์ตทั้งหมด\n' +
+    '   `  /portfolio`\n' +
+    '   → แสดงหุ้นทั้งหมดพร้อมกำไร/ขาดทุน\n\n' +
+    
+    '➖ */remove* ⭐ - ลด/ลบหุ้น (3 แบบ)\n' +
+    '   `  /remove`\n' +
+    '   → แสดงเมนูเลือกหุ้น (ใช้ปุ่ม)\n' +
+    '   `  /remove AAPL 5`\n' +
+    '   → ลด Apple 5 หุ้น\n' +
+    '   `  /remove AAPL all`\n' +
+    '   → ลบ Apple ทั้งหมด\n' +
+    '   `  /remove all`\n' +
+    '   → ลบพอร์ตทั้งหมด\n\n' +
+    
+    '🗑️ */clear* - ล้างพอร์ตทั้งหมด\n' +
+    '   `  /clear`\n' +
+    '   → ลบหุ้นทั้งหมด (ยืนยัน 2 ครั้ง)\n\n' +
+    
+    '━━━━ 📈 *ข้อมูลหุ้น* ━━━━\n\n' +
+    
+    '🔍 */check* - ตรวจสอบราคาหุ้น\n' +
+    '   `  /check TSLA`\n' +
+    '   → ดูราคาปัจจุบันของ Tesla\n\n' +
+    
+    '📰 */news* - ข่าวสารหุ้น\n' +
+    '   `  /news AAPL`\n' +
+    '   → ดูข่าวล่าสุดของ Apple\n\n' +
+    
+    '━━━━ ⚙️ *อื่นๆ* ━━━━\n\n' +
+    
+    '🎯 */menu* ⭐ - เมนูด่วน\n' +
+    '   `  /menu`\n' +
+    '   → แสดงปุ่มเมนูด่วน (ไม่ต้องพิมพ์)\n\n' +
+    
+    '❓ */help* - แสดงความช่วยเหลือ\n' +
+    '   `  /help`\n' +
+    '   → แสดงหน้านี้\n\n' +
+    
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '⭐ = ฟีเจอร์ใหม่\n' +
+    '💡 กดปุ่มเมนูด่านล่างเพื่อเริ่มใช้งาน\n' +
+    'หรือพิมพ์ /menu เพื่อแสดงเมนูด่วน';
+
+  await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+});
+
+// Handle callback queries (inline button clicks)
+bot.action(/^remove_select_/, handleRemoveSelect);
+bot.action(/^remove_partial_/, handleRemovePartial);
+bot.action(/^remove_all_/, handleRemoveAll);
+bot.action(/^remove_confirm_/, handleRemoveConfirm);
+bot.action(/^remove_direct_confirm_/, handleRemoveDirectConfirm);
+bot.action('remove_all_confirm_1', handleRemoveAllConfirm1);
+bot.action('remove_all_confirm_2', handleRemoveAllConfirm2);
+bot.action('remove_cancel', handleRemoveCancel);
+
+bot.action('clear_confirm_1', handleClearConfirm1);
+bot.action('clear_confirm_2', handleClearConfirm2);
+bot.action('clear_cancel', handleClearCancel);
+
+// Handle help example buttons
+bot.action('help_add_example', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply(
+    '💡 *ตัวอย่างคำสั่ง /add*\n\n' +
+    '`/add AAPL 150.50 10`\n' +
+    '→ เพิ่ม Apple 10 หุ้น ราคา $150.50\n\n' +
+    '`/add TSLA 220 5`\n' +
+    '→ เพิ่ม Tesla 5 หุ้น ราคา $220\n\n' +
+    '`/add MSFT 330.25 8`\n' +
+    '→ เพิ่ม Microsoft 8 หุ้น ราคา $330.25',
     { parse_mode: 'Markdown' }
   );
 });
 
-// Handle unknown commands
+bot.action('help_check_example', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply(
+    '💡 *ตัวอย่างคำสั่ง /check*\n\n' +
+    '`/check AAPL`\n' +
+    '→ ดูราคาปัจจุบันของ Apple\n\n' +
+    '`/check TSLA`\n' +
+    '→ ดูราคาปัจจุบันของ Tesla\n\n' +
+    '`/check GOOGL`\n' +
+    '→ ดูราคาปัจจุบันของ Google',
+    { parse_mode: 'Markdown' }
+  );
+});
+
+bot.action('help_news_example', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply(
+    '💡 *ตัวอย่างคำสั่ง /news*\n\n' +
+    '`/news AAPL`\n' +
+    '→ ดูข่าวล่าสุดของ Apple\n\n' +
+    '`/news TSLA`\n' +
+    '→ ดูข่าวล่าสุดของ Tesla\n\n' +
+    '`/news NVDA`\n' +
+    '→ ดูข่าวล่าสุดของ NVIDIA',
+    { parse_mode: 'Markdown' }
+  );
+});
+
+bot.action('help_close', async (ctx) => {
+  await ctx.answerCbQuery('ปิดแล้ว');
+  try {
+    await ctx.deleteMessage();
+  } catch (error) {
+    // Ignore error if message is too old
+  }
+});
+
+// Handle reply keyboard button clicks
+bot.hears('📊 ดูพอร์ต', handlePortfolioCommand);
+bot.hears('➕ เพิ่มหุ้น', async (ctx) => {
+  const buttons = [
+    [Markup.button.callback('💡 ดูตัวอย่าง', 'help_add_example')],
+    [Markup.button.callback('❌ ปิด', 'help_close')]
+  ];
+
+  await ctx.reply(
+    '➕ *เพิ่มหุ้นเข้าพอร์ต*\n\n' +
+    'ใช้: `/add <symbol> <ราคาซื้อ> <จำนวน>`\n\n' +
+    '📝 *วิธีใช้:*\n' +
+    '1️⃣ พิมพ์ /add\n' +
+    '2️⃣ ตามด้วยสัญลักษณ์หุ้น เช่น AAPL\n' +
+    '3️⃣ ราคาซื้อ เช่น 150.50\n' +
+    '4️⃣ จำนวนหุ้น เช่น 10\n\n' +
+    '✅ ตัวอย่าง:\n' +
+    '`/add AAPL 150.50 10`',
+    { 
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons)
+    }
+  );
+});
+bot.hears('➖ ลดหุ้น', handleRemoveCommand);
+bot.hears('🔍 เช็คราคา', async (ctx) => {
+  const buttons = [
+    [Markup.button.callback('💡 ดูตัวอย่าง', 'help_check_example')],
+    [Markup.button.callback('❌ ปิด', 'help_close')]
+  ];
+
+  await ctx.reply(
+    '🔍 *ตรวจสอบราคาหุ้น*\n\n' +
+    'ใช้: `/check <symbol>`\n\n' +
+    '📝 *วิธีใช้:*\n' +
+    '1️⃣ พิมพ์ /check\n' +
+    '2️⃣ ตามด้วยสัญลักษณ์หุ้น\n\n' +
+    '✅ ตัวอย่าง:\n' +
+    '`/check TSLA` - เช็คราคา Tesla\n' +
+    '`/check AAPL` - เช็คราคา Apple',
+    { 
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons)
+    }
+  );
+});
+bot.hears('📰 ข่าวสาร', async (ctx) => {
+  const buttons = [
+    [Markup.button.callback('💡 ดูตัวอย่าง', 'help_news_example')],
+    [Markup.button.callback('❌ ปิด', 'help_close')]
+  ];
+
+  await ctx.reply(
+    '📰 *ข่าวสารหุ้น*\n\n' +
+    'ใช้: `/news <symbol>`\n\n' +
+    '📝 *วิธีใช้:*\n' +
+    '1️⃣ พิมพ์ /news\n' +
+    '2️⃣ ตามด้วยสัญลักษณ์หุ้น\n\n' +
+    '✅ ตัวอย่าง:\n' +
+    '`/news AAPL` - ข่าว Apple\n' +
+    '`/news TSLA` - ข่าว Tesla',
+    { 
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons)
+    }
+  );
+});
+bot.hears('❓ ช่วยเหลือ', async (ctx) => {
+  const helpMessage = 
+    '📋 *คำสั่งทั้งหมดพร้อมวิธีใช้*\n\n' +
+    
+    '━━━━ 📊 *การจัดการพอร์ต* ━━━━\n\n' +
+    
+    '➕ */add* - เพิ่มหุ้นเข้าพอร์ต\n' +
+    '   `  /add AAPL 150.50 10`\n' +
+    '   → เพิ่ม Apple 10 หุ้น ราคา $150.50\n\n' +
+    
+    '📊 */portfolio* - ดูพอร์ตทั้งหมด\n' +
+    '   `  /portfolio`\n' +
+    '   → แสดงหุ้นทั้งหมดพร้อมกำไร/ขาดทุน\n\n' +
+    
+    '➖ */remove* ⭐ - ลด/ลบหุ้น (3 แบบ)\n' +
+    '   `  /remove`\n' +
+    '   → แสดงเมนูเลือกหุ้น (ใช้ปุ่ม)\n' +
+    '   `  /remove AAPL 5`\n' +
+    '   → ลด Apple 5 หุ้น\n' +
+    '   `  /remove AAPL all`\n' +
+    '   → ลบ Apple ทั้งหมด\n' +
+    '   `  /remove all`\n' +
+    '   → ลบพอร์ตทั้งหมด\n\n' +
+    
+    '🗑️ */clear* - ล้างพอร์ตทั้งหมด\n' +
+    '   `  /clear`\n' +
+    '   → ลบหุ้นทั้งหมด (ยืนยัน 2 ครั้ง)\n\n' +
+    
+    '━━━━ 📈 *ข้อมูลหุ้น* ━━━━\n\n' +
+    
+    '🔍 */check* - ตรวจสอบราคาหุ้น\n' +
+    '   `  /check TSLA`\n' +
+    '   → ดูราคาปัจจุบันของ Tesla\n\n' +
+    
+    '📰 */news* - ข่าวสารหุ้น\n' +
+    '   `  /news AAPL`\n' +
+    '   → ดูข่าวล่าสุดของ Apple\n\n' +
+    
+    '━━━━ ⚙️ *อื่นๆ* ━━━━\n\n' +
+    
+    '🎯 */menu* ⭐ - เมนูด่วน\n' +
+    '   `  /menu`\n' +
+    '   → แสดงปุ่มเมนูด่วน (ไม่ต้องพิมพ์)\n\n' +
+    
+    '❓ */help* - แสดงความช่วยเหลือ\n' +
+    '   `  /help`\n' +
+    '   → แสดงหน้านี้\n\n' +
+    
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '⭐ = ฟีเจอร์ใหม่\n' +
+    '💡 กดปุ่มเมนูด่านล่างเพื่อเริ่มใช้งาน\n' +
+    'หรือพิมพ์ /menu เพื่อแสดงเมนูด่วน';
+
+  await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+});
+
+// Handle text input (for remove quantity or unknown commands)
 bot.on('text', async (ctx) => {
   const text = ctx.message.text;
+  
+  // Check if this is quantity input for remove command
+  const handled = await handleTextInput(ctx);
+  if (handled) return;
+  
+  // Handle unknown commands
   if (text.startsWith('/')) {
     await ctx.reply(
       '❌ ไม่รู้จักคำสั่งนี้\nใช้ /help เพื่อดูคำสั่งทั้งหมด'
