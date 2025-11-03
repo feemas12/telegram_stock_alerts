@@ -110,12 +110,13 @@ export async function addToPortfolio(userId, symbol, buyPrice, qty, type = 'stoc
   const connection = await getConnection();
   
   try {
-    // MySQL doesn't support ON CONFLICT, use INSERT ... ON DUPLICATE KEY UPDATE
+    // Calculate weighted average price
+    // Formula: (old_price * old_qty + new_price * new_qty) / (old_qty + new_qty)
     await connection.query(
       `INSERT INTO portfolio (user_id, symbol, buy_price, qty, type) 
        VALUES (?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE 
-       buy_price = VALUES(buy_price), 
+       buy_price = ((buy_price * qty) + (VALUES(buy_price) * VALUES(qty))) / (qty + VALUES(qty)), 
        qty = qty + VALUES(qty)`,
       [userId, symbol.toUpperCase(), buyPrice, qty, type]
     );
