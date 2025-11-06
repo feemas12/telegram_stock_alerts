@@ -1,9 +1,9 @@
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { Telegraf } from 'telegraf';
-import { initDatabase, getAllPortfolioStocks, updateLastNotified, closeDatabase } from './db.js';
+import { initDatabase, getAllPortfolioStocks, updateLastNotified, getAllWatchlistStocks, updateWatchlistAlert, closeDatabase } from './db.js';
 import { getStockQuote, shouldAlert, calculatePriceChange } from './services/finnhub.js';
-import { sendStockAlert } from './services/telegram.js';
+import { sendStockAlert, sendWatchlistAlert } from './services/telegram.js';
 import { handleAddCommand } from './commands/add.js';
 import { handleCheckCommand } from './commands/check.js';
 import { handlePortfolioCommand } from './commands/portfolio.js';
@@ -26,6 +26,14 @@ import {
   handleClearConfirm2, 
   handleClearCancel 
 } from './commands/clear.js';
+import {
+  handleWatchCommand,
+  handleWatchlistCommand,
+  handleUnwatchAction,
+  handleUnwatchAllConfirm,
+  handleUnwatchAllExecute,
+  handleUnwatchCancel
+} from './commands/watch.js';
 import { Markup } from 'telegraf';
 
 dotenv.config();
@@ -90,13 +98,14 @@ bot.on('my_chat_member', async (ctx) => {
     
     // Auto show menu keyboard
     setTimeout(async () => {
-      const keyboard = Markup.keyboard([
-        ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
-        ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
-        ['📰 ข่าวสาร', '❓ ช่วยเหลือ']
-      ])
-      .resize()
-      .persistent();
+  const keyboard = Markup.keyboard([
+    ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
+    ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
+    ['👁️ รายการติดตาม', '📰 ข่าวสาร'],
+    ['❓ ช่วยเหลือ']
+  ])
+  .resize()
+  .persistent();
 
       await ctx.reply(
         '🎯 *เมนูด่วนของคุณพร้อมแล้ว\\!*\n\n' +
@@ -111,7 +120,7 @@ bot.on('my_chat_member', async (ctx) => {
 bot.command('start', async (ctx) => {
   const firstName = ctx.from.first_name || 'เพื่อน';
   
-  const welcomeMessage = `👋 *สวัสดีครับคุณ ${firstName}\\!*
+  const welcomeMessage = `👋 *คุณ ${firstName}\\! สามารถใช้คำสั่งตามด้านล่างนี้ได้เลยครับ*
 
 🤖 *ยินดีต้อนรับสู่ Stock Alert Bot*
 
@@ -143,7 +152,8 @@ bot.command('start', async (ctx) => {
   const keyboard = Markup.keyboard([
     ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
     ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
-    ['📰 ข่าวสาร', '❓ ช่วยเหลือ']
+    ['👁️ รายการติดตาม', '📰 ข่าวสาร'],
+    ['❓ ช่วยเหลือ']
   ])
   .resize()
   .persistent();
@@ -161,13 +171,16 @@ bot.command('portfolio', handlePortfolioCommand);
 bot.command('news', handleNewsCommand);
 bot.command('remove', handleRemoveCommand);
 bot.command('clear', handleClearCommand);
+bot.command('watch', handleWatchCommand);
+bot.command('watchlist', handleWatchlistCommand);
 
 // Menu command - show reply keyboard
 bot.command('menu', async (ctx) => {
   const keyboard = Markup.keyboard([
     ['📊 ดูพอร์ต', '🔍 เช็คราคา'],
     ['➕ เพิ่มหุ้น', '➖ ลดหุ้น'],
-    ['📰 ข่าวสาร', '❓ ช่วยเหลือ']
+    ['👁️ รายการติดตาม', '📰 ข่าวสาร'],
+    ['❓ ช่วยเหลือ']
   ])
   .resize()
   .persistent();
@@ -195,15 +208,13 @@ bot.command('help', async (ctx) => {
     '   `  /portfolio`\n' +
     '   → แสดงหุ้นทั้งหมดพร้อมกำไร/ขาดทุน\n\n' +
     
-    '➖ */remove* ⭐ - ลด/ลบหุ้น (3 แบบ)\n' +
+    '➖ */remove* ⭐ - ลด/ลบหุ้น (2 แบบ)\n' +
     '   `  /remove`\n' +
     '   → แสดงเมนูเลือกหุ้น (ใช้ปุ่ม)\n' +
     '   `  /remove AAPL 5`\n' +
     '   → ลด Apple 5 หุ้น\n' +
     '   `  /remove AAPL all`\n' +
     '   → ลบ Apple ทั้งหมด\n' +
-    '   `  /remove all`\n' +
-    '   → ลบพอร์ตทั้งหมด\n\n' +
     
     '🗑️ */clear* - ล้างพอร์ตทั้งหมด\n' +
     '   `  /clear`\n' +
@@ -217,6 +228,18 @@ bot.command('help', async (ctx) => {
     
     '📰 */news* - ข่าวสารหุ้น\n' +
     '   `  /news AAPL`\n' +
+    '   → ดูข่าวล่าสุดของ Apple\n\n' +
+    
+    '━━━━ 👁️ *รายการติดตาม* ━━━━\n\n' +
+    
+    '��️ */watch* ⭐ - เพิ่มหุ้นเข้ารายการติดตาม\n' +
+    '   `  /watch AAPL`\n' +
+    '   → เพิ่ม Apple เข้ารายการติดตาม\n' +
+    '   → แจ้งเตือนที่ ±3% และ ±5%\n\n' +
+    
+    '📝 */watchlist* ⭐ - ดูรายการติดตาม\n' +
+    '   `  /watchlist`\n' +
+
     '   → ดูข่าวล่าสุดของ Apple\n\n' +
     
     '━━━━ ⚙️ *อื่นๆ* ━━━━\n\n' +
@@ -250,6 +273,11 @@ bot.action('remove_cancel', handleRemoveCancel);
 bot.action('clear_confirm_1', handleClearConfirm1);
 bot.action('clear_confirm_2', handleClearConfirm2);
 bot.action('clear_cancel', handleClearCancel);
+
+bot.action(/^unwatch_(?!all|cancel)/, handleUnwatchAction);
+bot.action('unwatch_all_confirm', handleUnwatchAllConfirm);
+bot.action('unwatch_all_execute', handleUnwatchAllExecute);
+bot.action('unwatch_cancel', handleUnwatchCancel);
 
 // Handle help example buttons
 bot.action('help_add_example', async (ctx) => {
@@ -285,6 +313,18 @@ bot.action('help_news_example', async (ctx) => {
   await ctx.reply(
     '💡 *ตัวอย่างคำสั่ง /news*\n\n' +
     '`/news AAPL`\n' +
+    '   → ดูข่าวล่าสุดของ Apple\n\n' +
+    
+    '━━━━ 👁️ *รายการติดตาม* ━━━━\n\n' +
+    
+    '��️ */watch* ⭐ - เพิ่มหุ้นเข้ารายการติดตาม\n' +
+    '   `  /watch AAPL`\n' +
+    '   → เพิ่ม Apple เข้ารายการติดตาม\n' +
+    '   → แจ้งเตือนที่ ±3% และ ±5%\n\n' +
+    
+    '📝 */watchlist* ⭐ - ดูรายการติดตาม\n' +
+    '   `  /watchlist`\n' +
+
     '→ ดูข่าวล่าสุดของ Apple\n\n' +
     '`/news TSLA`\n' +
     '→ ดูข่าวล่าสุดของ Tesla\n\n' +
@@ -363,12 +403,27 @@ bot.hears('📰 ข่าวสาร', async (ctx) => {
     '2️⃣ ตามด้วยสัญลักษณ์หุ้น\n\n' +
     '✅ ตัวอย่าง:\n' +
     '`/news AAPL` - ข่าว Apple\n' +
+    '   → ดูข่าวล่าสุดของ Apple\n\n' +
+    
+    '━━━━ 👁️ *รายการติดตาม* ━━━━\n\n' +
+    
+    '��️ */watch* ⭐ - เพิ่มหุ้นเข้ารายการติดตาม\n' +
+    '   `  /watch AAPL`\n' +
+    '   → เพิ่ม Apple เข้ารายการติดตาม\n' +
+    '   → แจ้งเตือนที่ ±3% และ ±5%\n\n' +
+    
+    '📝 */watchlist* ⭐ - ดูรายการติดตาม\n' +
+    '   `  /watchlist`\n' +
+
     '`/news TSLA` - ข่าว Tesla',
     { 
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
     }
   );
+});
+bot.hears('👁️ รายการติดตาม', async (ctx) => {
+  await handleWatchlistCommand(ctx);
 });
 bot.hears('❓ ช่วยเหลือ', async (ctx) => {
   const helpMessage = 
@@ -384,15 +439,13 @@ bot.hears('❓ ช่วยเหลือ', async (ctx) => {
     '   `  /portfolio`\n' +
     '   → แสดงหุ้นทั้งหมดพร้อมกำไร/ขาดทุน\n\n' +
     
-    '➖ */remove* ⭐ - ลด/ลบหุ้น (3 แบบ)\n' +
+    '➖ */remove* ⭐ - ลด/ลบหุ้น (2 แบบ)\n' +
     '   `  /remove`\n' +
     '   → แสดงเมนูเลือกหุ้น (ใช้ปุ่ม)\n' +
     '   `  /remove AAPL 5`\n' +
     '   → ลด Apple 5 หุ้น\n' +
     '   `  /remove AAPL all`\n' +
     '   → ลบ Apple ทั้งหมด\n' +
-    '   `  /remove all`\n' +
-    '   → ลบพอร์ตทั้งหมด\n\n' +
     
     '🗑️ */clear* - ล้างพอร์ตทั้งหมด\n' +
     '   `  /clear`\n' +
@@ -406,6 +459,18 @@ bot.hears('❓ ช่วยเหลือ', async (ctx) => {
     
     '📰 */news* - ข่าวสารหุ้น\n' +
     '   `  /news AAPL`\n' +
+    '   → ดูข่าวล่าสุดของ Apple\n\n' +
+    
+    '━━━━ 👁️ *รายการติดตาม* ━━━━\n\n' +
+    
+    '��️ */watch* ⭐ - เพิ่มหุ้นเข้ารายการติดตาม\n' +
+    '   `  /watch AAPL`\n' +
+    '   → เพิ่ม Apple เข้ารายการติดตาม\n' +
+    '   → แจ้งเตือนที่ ±3% และ ±5%\n\n' +
+    
+    '📝 */watchlist* ⭐ - ดูรายการติดตาม\n' +
+    '   `  /watchlist`\n' +
+
     '   → ดูข่าวล่าสุดของ Apple\n\n' +
     
     '━━━━ ⚙️ *อื่นๆ* ━━━━\n\n' +
@@ -518,10 +583,107 @@ async function checkPriceAlerts() {
   }
 }
 
+// Check watchlist price alerts
+async function checkWatchlistAlerts() {
+  try {
+    console.log('🔍 Checking watchlist alerts...');
+    
+    const watchlistStocks = await getAllWatchlistStocks();
+    
+    if (!watchlistStocks || watchlistStocks.length === 0) {
+      console.log('No stocks in watchlist to check');
+      return;
+    }
+
+    // Group stocks by symbol to avoid multiple API calls
+    const stocksBySymbol = {};
+    watchlistStocks.forEach(stock => {
+      if (!stocksBySymbol[stock.symbol]) {
+        stocksBySymbol[stock.symbol] = [];
+      }
+      stocksBySymbol[stock.symbol].push(stock);
+    });
+
+    // Check each unique symbol
+    for (const symbol of Object.keys(stocksBySymbol)) {
+      try {
+        const quote = await getStockQuote(symbol);
+        const stocks = stocksBySymbol[symbol];
+
+        // Check each user's watchlist for this stock
+        for (const stock of stocks) {
+          const basePrice = parseFloat(stock.base_price);
+          const currentPrice = quote.currentPrice;
+          const percentChange = calculatePriceChange(currentPrice, basePrice);
+          const absChange = Math.abs(percentChange);
+
+          let shouldSend3Alert = false;
+          let shouldSend5Alert = false;
+
+          // Check for ±3% alert (only if not sent before)
+          if (!stock.alert_3_sent && absChange >= 3) {
+            shouldSend3Alert = true;
+          }
+
+          // Check for ±5% alert (only if not sent before)
+          if (!stock.alert_5_sent && absChange >= 5) {
+            shouldSend5Alert = true;
+          }
+
+          // Send 3% alert
+          if (shouldSend3Alert && !shouldSend5Alert) {
+            await sendWatchlistAlert(stock.telegram_id, {
+              symbol: stock.symbol,
+              currentPrice: currentPrice,
+              basePrice: basePrice,
+              percentChange: percentChange,
+              alertLevel: 3
+            });
+
+            // Update alert status
+            await updateWatchlistAlert(stock.id, true, false, currentPrice);
+            console.log(`✅ 3% Alert sent for ${stock.symbol} to user ${stock.telegram_id}`);
+          }
+
+          // Send 5% alert (takes precedence over 3%)
+          if (shouldSend5Alert) {
+            await sendWatchlistAlert(stock.telegram_id, {
+              symbol: stock.symbol,
+              currentPrice: currentPrice,
+              basePrice: basePrice,
+              percentChange: percentChange,
+              alertLevel: 5
+            });
+
+            // Update alert status (mark both 3% and 5% as sent)
+            await updateWatchlistAlert(stock.id, true, true, currentPrice);
+            console.log(`✅ 5% Alert sent for ${stock.symbol} to user ${stock.telegram_id}`);
+          }
+        }
+
+        // Rate limiting: wait 1 second between API calls
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        // Only log unexpected errors (not invalid symbols or rate limits)
+        if (!error.message.includes('No data found') && !error.message.includes('rate limit')) {
+          console.error(`Error checking watchlist ${symbol}:`, error.message);
+        }
+      }
+    }
+
+    console.log('✅ Watchlist alert check completed');
+
+  } catch (error) {
+    console.error('Error in checkWatchlistAlerts:', error);
+  }
+}
+
 // Schedule price check every 5 minutes
 cron.schedule('*/5 * * * *', () => {
   console.log('⏰ Running scheduled price check...');
   checkPriceAlerts();
+  checkWatchlistAlerts();
 });
 
 // Error handling

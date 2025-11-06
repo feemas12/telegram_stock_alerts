@@ -60,6 +60,23 @@ export async function initDatabase() {
       )
     `);
 
+    // Create watchlist table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS watchlist (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        symbol VARCHAR(20) NOT NULL,
+        base_price DECIMAL(10, 2) NOT NULL,
+        alert_3_sent BOOLEAN DEFAULT FALSE,
+        alert_5_sent BOOLEAN DEFAULT FALSE,
+        last_price DECIMAL(10, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_user_watchlist (user_id, symbol)
+      )
+    `);
+
     console.log('✅ Database initialized successfully');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
@@ -282,6 +299,132 @@ export async function clearPortfolio(userId) {
     };
   } catch (error) {
     console.error('Error in clearPortfolio:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+// Watchlist operations
+export async function addToWatchlist(userId, symbol, basePrice) {
+  const connection = await getConnection();
+  
+  try {
+    await connection.query(
+      `INSERT INTO watchlist (user_id, symbol, base_price, last_price) 
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+       base_price = VALUES(base_price),
+       last_price = VALUES(last_price),
+       alert_3_sent = FALSE,
+       alert_5_sent = FALSE`,
+      [userId, symbol.toUpperCase(), basePrice, basePrice]
+    );
+    return true;
+  } catch (error) {
+    console.error('Error in addToWatchlist:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getWatchlist(userId) {
+  const connection = await getConnection();
+  
+  try {
+    const [rows] = await connection.query(
+      'SELECT * FROM watchlist WHERE user_id = ?',
+      [userId]
+    );
+    return rows;
+  } catch (error) {
+    console.error('Error in getWatchlist:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getAllWatchlistStocks() {
+  const connection = await getConnection();
+  
+  try {
+    const [rows] = await connection.query(`
+      SELECT w.*, u.telegram_id 
+      FROM watchlist w 
+      JOIN users u ON w.user_id = u.id
+    `);
+    return rows;
+  } catch (error) {
+    console.error('Error in getAllWatchlistStocks:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function removeFromWatchlist(userId, symbol) {
+  const connection = await getConnection();
+  
+  try {
+    const result = await connection.query(
+      'DELETE FROM watchlist WHERE user_id = ? AND symbol = ?',
+      [userId, symbol.toUpperCase()]
+    );
+    return result[0].affectedRows > 0;
+  } catch (error) {
+    console.error('Error in removeFromWatchlist:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function updateWatchlistAlert(watchlistId, alert3Sent, alert5Sent, lastPrice) {
+  const connection = await getConnection();
+  
+  try {
+    await connection.query(
+      'UPDATE watchlist SET alert_3_sent = ?, alert_5_sent = ?, last_price = ? WHERE id = ?',
+      [alert3Sent, alert5Sent, lastPrice, watchlistId]
+    );
+    return true;
+  } catch (error) {
+    console.error('Error in updateWatchlistAlert:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function clearWatchlist(userId) {
+  const connection = await getConnection();
+  
+  try {
+    const [countRows] = await connection.query(
+      'SELECT COUNT(*) as count FROM watchlist WHERE user_id = ?',
+      [userId]
+    );
+    
+    const count = countRows[0].count;
+
+    if (count === 0) {
+      return { success: false, message: 'Watchlist is already empty' };
+    }
+
+    await connection.query(
+      'DELETE FROM watchlist WHERE user_id = ?',
+      [userId]
+    );
+
+    return { 
+      success: true, 
+      deletedCount: count,
+      message: `Cleared ${count} stock(s) from watchlist` 
+    };
+  } catch (error) {
+    console.error('Error in clearWatchlist:', error);
     throw error;
   } finally {
     connection.release();

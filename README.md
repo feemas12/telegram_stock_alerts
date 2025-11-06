@@ -10,6 +10,7 @@ A Telegram bot for tracking US stock prices with automatic alerts and portfolio 
 - **Portfolio Management** - Track your stock positions with profit/loss calculations
 - **Weighted Average Price** - Automatic calculation when adding more shares
 - **Auto Alerts** - Automatic notifications when stock prices change by ±5% (configurable)
+- **Watchlist** ⭐ - Track stocks of interest with ±3% and ±5% price alerts
 
 ### 🎯 Portfolio Management
 - **Add Stocks** - Add stocks with automatic weighted average calculation
@@ -114,6 +115,17 @@ A Telegram bot for tracking US stock prices with automatic alerts and portfolio 
 | `/check <symbol>` | Check current stock price | `/check AAPL` |
 | `/news <symbol>` | Get latest stock news | `/news TSLA` |
 
+### Watchlist ⭐
+
+| Command | Description | Example |
+|---------|-------------|---------|  
+| `/watch <symbol>` | Add stock to watchlist | `/watch AAPL` |
+| `/watchlist` | View all watched stocks | `/watchlist` |
+
+**Alert Levels:**
+- ±3% → First alert
+- ±5% → Second alert
+
 ### Utilities
 
 | Command | Description | Example |
@@ -195,19 +207,46 @@ Shows a persistent keyboard menu with buttons for:
 - ➕ Add Stock
 - ➖ Remove Stock  
 - 🔍 Check Price
+- 👁️ Watchlist
 - 📰 News
 - ❓ Help
 
+### 7. Track Stocks with Watchlist ⭐
+```
+/watch AAPL
+```
+Adds Apple to your watchlist and shows the current price. You'll receive:
+- **First alert** when price moves ±3% from base price
+- **Second alert** when price moves ±5% from base price
+
+**View your watchlist:**
+```
+/watchlist
+```
+Shows all tracked stocks with:
+- Base price (when added)
+- Current price
+- Change percentage
+- Alert status
+- Buttons to remove stocks
+
 ## ⚡ Auto Alert System
 
-The bot automatically monitors your portfolio every 5 minutes:
+The bot automatically monitors your portfolio and watchlist every 5 minutes:
 
+### Portfolio Alerts
 1. Fetches current prices for all stocks in your portfolio
 2. Compares with your buy price
 3. Sends alert if price change exceeds threshold (default: ±5%)
 4. Updates last notification to avoid spam
 
-### Example Alert:
+### Watchlist Alerts ⭐
+1. Monitors all stocks in your watchlist
+2. Sends **first alert** at ±3% price change
+3. Sends **second alert** at ±5% price change
+4. Each alert is sent only once per stock
+
+### Example Portfolio Alert:
 ```
 ⚡ AAPL Alert ⚠️
 
@@ -217,6 +256,17 @@ The bot automatically monitors your portfolio every 5 minutes:
 📦 จำนวน: 10 หุ้น
 
 ต่ำกว่าราคาซื้อของคุณ 5.6% แล้ว ⚠️
+```
+
+### Example Watchlist Alert:
+```
+⚠️ Watchlist Alert: TSLA
+
+📊 ราคาเริ่มต้น: $200.00
+💰 ราคาปัจจุบัน: $206.50
+📈 สูงขึ้น: 3.25%
+
+🔔 แจ้งเตือนระดับ ±3%
 ```
 
 ## 📂 Project Structure
@@ -239,8 +289,9 @@ telegram-app-checkstock/
     ├── check.js        # /check command handler
     ├── news.js         # /news command handler
     ├── portfolio.js    # /portfolio command handler
-    ├── remove.js       # /remove command with 4 modes (NEW)
-    └── clear.js        # /clear command (NEW)
+    ├── remove.js       # /remove command with 4 modes
+    ├── clear.js        # /clear command
+    └── watch.js        # /watch & /watchlist commands ⭐ NEW
 ```
 
 ## 🗄️ Database Schema
@@ -263,6 +314,19 @@ telegram-app-checkstock/
 | qty | DECIMAL(10, 4) | Quantity of shares |
 | type | VARCHAR(20) | 'stock' or 'fund' |
 | last_notified | DECIMAL(10, 2) | Last alert price |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+### Table: `watchlist` ⭐
+| Field | Type | Description |
+|-------|------|-------------|
+| id | INT AUTO_INCREMENT PRIMARY KEY | Watchlist entry ID |
+| user_id | INT | FK to users.id |
+| symbol | VARCHAR(20) | Stock symbol (e.g., AAPL) |
+| base_price | DECIMAL(10, 2) | Price when added to watchlist |
+| alert_3_sent | BOOLEAN | Whether ±3% alert was sent |
+| alert_5_sent | BOOLEAN | Whether ±5% alert was sent |
+| last_price | DECIMAL(10, 2) | Last recorded price |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 

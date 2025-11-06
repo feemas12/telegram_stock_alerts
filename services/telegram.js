@@ -156,4 +156,33 @@ export function formatStockCheckMessage(stockData, portfolioData = null) {
   return message;
 }
 
-export default { getBotInstance, sendMessage, sendStockAlert, formatPortfolioMessage, formatStockCheckMessage };
+/**
+ * Send watchlist alert message
+ * @param {string} telegramId - Telegram user ID
+ * @param {Object} alertData - Alert data object
+ */
+export async function sendWatchlistAlert(telegramId, alertData) {
+  const { symbol, currentPrice, basePrice, percentChange, alertLevel } = alertData;
+  
+  const price = parseFloat(currentPrice);
+  const base = parseFloat(basePrice);
+  const change = parseFloat(percentChange);
+  
+  const emoji = change >= 0 ? '📈' : '📉';
+  const direction = change >= 0 ? 'สูงขึ้น' : 'ลดลง';
+  const levelEmoji = alertLevel === 5 ? '⚠️⚠️' : '⚠️';
+  
+  const message = `
+${levelEmoji} *Watchlist Alert: ${symbol}*
+
+📊 ราคาเริ่มต้น: $${base.toFixed(2)}
+💰 ราคาปัจจุบัน: $${price.toFixed(2)}
+${emoji} ${direction}: ${Math.abs(change).toFixed(2)}%
+
+🔔 แจ้งเตือนระดับ ±${alertLevel}%
+  `.trim();
+
+  await sendMessage(telegramId, message);
+}
+
+export default { getBotInstance, sendMessage, sendStockAlert, sendWatchlistAlert, formatPortfolioMessage, formatStockCheckMessage };
